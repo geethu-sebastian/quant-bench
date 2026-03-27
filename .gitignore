@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Project artifacts
+results/**/*.json
+results/**/*.png
+results/**/*.csv
+!results/.gitkeep
+
+# Models (too large for git)
+models/
+*.bin
+*.safetensors
+*.onnx
+*.gguf
+
+# OS
+.DS_Store
+Thumbs.db
