@@ -6,7 +6,6 @@ datasets>=2.16.0
 sentencepiece>=0.1.99
 
 # Quantization backends
-auto-gptq>=0.7.0
 optimum[onnxruntime]>=1.16.0
 onnx>=1.15.0
 onnxruntime>=1.17.0

@@ -22,10 +22,25 @@ if [ "$ACTUAL_MAJOR" -lt "$REQUIRED_MAJOR" ] || { [ "$ACTUAL_MAJOR" -eq "$REQUIR
     exit 1
 fi
 
+# Attempt to install python3-venv on Debian/Ubuntu systems if needed
+if command -v apt-get &> /dev/null; then
+    if ! python3 -m venv -h &> /dev/null; then
+        echo "[INFO] python3-venv module is missing. Attempting to install it..."
+        apt-get update -y
+        # Try generic first, then specific version based on current python version
+        apt-get install -y python3-venv "python${ACTUAL_MAJOR}.${ACTUAL_MINOR}-venv" || true
+    fi
+fi
+
 # Create virtual environment
 echo ""
 echo "[1/4] Creating virtual environment..."
-python3 -m venv venv
+if ! python3 -m venv venv; then
+    echo "[ERROR] Failed to create virtual environment."
+    echo "Please manually run: apt install python3.12-venv (or your specific version)"
+    echo "Then re-run this setup script."
+    exit 1
+fi
 source venv/bin/activate
 
 # Upgrade pip
@@ -40,8 +55,14 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 
 # Install remaining dependencies
 echo ""
-echo "[4/4] Installing project dependencies..."
+echo "[4/5] Installing general project dependencies..."
 pip install -r requirements.txt
+
+echo ""
+echo "[5/5] Compiling AutoGPTQ for CPU (this may take a minute)..."
+# AutoGPTQ tries to build CUDA extensions by default and fails in isolated environments
+# and on CPU-only machines. We explicitly disable CUDA and use the already-installed torch.
+BUILD_CUDA_EXT=0 pip install auto-gptq --no-build-isolation
 
 # Create output directories
 mkdir -p results models
