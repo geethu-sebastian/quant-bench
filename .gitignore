@@ -25,9 +25,9 @@ env/
 .ipynb_checkpoints/
 
 # Project artifacts
-results/**/*.json
-results/**/*.png
-results/**/*.csv
+# results/**/*.json
+# results/**/*.png
+# results/**/*.csv
 !results/.gitkeep
 
 # Models (too large for git)
