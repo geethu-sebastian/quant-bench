@@ -76,6 +76,10 @@ QUANTIZATION_METHODS = {
         "description": "GPTQ (INT4/INT8) — post-training weight quantization with second-order correction",
         "requires_calibration": True,
     },
+    "static": {
+        "description": "PyTorch Static Post-Training Quantization (INT8) — calibration-based, quantizes both weights and activations",
+        "requires_calibration": True,
+    },
     "onnx": {
         "description": "ONNX Runtime Dynamic Quantization (INT8) — cross-platform deployment",
         "requires_calibration": False,
