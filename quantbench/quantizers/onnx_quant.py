@@ -346,8 +346,8 @@ def run_onnx_inference(
 ) -> dict:
     """Run inference using ONNX Runtime for benchmarking.
 
-    Uses ONNX Runtime's CPUExecutionProvider for consistent
-    CPU-only benchmarking results.
+    Uses Optimum's ORTModelForCausalLM to properly handle 
+    KV cache (past_key_values) and position_ids automatically.
 
     Args:
         onnx_model_path: Path to the ONNX model.
@@ -361,59 +361,44 @@ def run_onnx_inference(
     if not ONNX_AVAILABLE:
         raise RuntimeError("ONNX Runtime not installed.")
 
-    # Create inference session
-    session_options = ort.SessionOptions()
-    session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-    session_options.intra_op_num_threads = 4
+    from optimum.onnxruntime import ORTModelForCausalLM
+    import torch
 
-    session = ort.InferenceSession(
-        onnx_model_path,
-        session_options,
-        providers=["CPUExecutionProvider"],
+    model_dir = Path(onnx_model_path).parent.as_posix()
+    file_name = Path(onnx_model_path).name
+
+    model = ORTModelForCausalLM.from_pretrained(
+        model_dir,
+        file_name=file_name,
+        provider="CPUExecutionProvider",
+        use_cache=True,
+        trust_remote_code=True
     )
 
     # Tokenize input
-    inputs = tokenizer(prompt, return_tensors="np")
-    input_ids = inputs["input_ids"].astype(np.int64)
-    attention_mask = inputs["attention_mask"].astype(np.int64)
+    inputs = tokenizer(prompt, return_tensors="pt")
 
-    # Autoregressive generation
-    generated_tokens = []
+    # Autoregressive generation using HuggingFace's generate() loop
     start_time = time.time()
 
-    for _ in range(max_new_tokens):
-        outputs = session.run(
-            None,
-            {
-                "input_ids": input_ids,
-                "attention_mask": attention_mask,
-            },
-        )
-
-        logits = outputs[0]
-        next_token_id = np.argmax(logits[0, -1, :])
-
-        if next_token_id == tokenizer.eos_token_id:
-            break
-
-        generated_tokens.append(next_token_id)
-
-        # Append token for next iteration
-        input_ids = np.concatenate(
-            [input_ids, np.array([[next_token_id]], dtype=np.int64)], axis=1
-        )
-        attention_mask = np.concatenate(
-            [attention_mask, np.array([[1]], dtype=np.int64)], axis=1
+    with torch.no_grad():
+        outputs = model.generate(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
         )
 
     total_time = time.time() - start_time
-    generated_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    
+    num_generated = outputs.shape[1] - inputs["input_ids"].shape[1]
+    generated_text = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 
     return {
         "generated_text": generated_text,
-        "num_tokens": len(generated_tokens),
+        "num_tokens": num_generated,
         "total_time_s": total_time,
-        "tokens_per_second": len(generated_tokens) / max(total_time, 1e-6),
+        "tokens_per_second": num_generated / max(total_time, 1e-6),
     }
 
 
