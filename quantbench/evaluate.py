@@ -245,6 +245,7 @@ def evaluate_perplexity_onnx(
 
     encodings = tokenizer(full_text, return_tensors="pt", truncation=False)
     input_ids = encodings["input_ids"]
+    attention_mask = encodings["attention_mask"]
     seq_len = input_ids.shape[1]
 
     # Create ONNX session via Optimum
@@ -274,10 +275,11 @@ def evaluate_perplexity_onnx(
             break
 
         chunk_ids = input_ids[:, begin_loc:end_loc]
+        chunk_mask = attention_mask[:, begin_loc:end_loc]
 
         try:
             with torch.no_grad():
-                outputs = model(input_ids=chunk_ids)
+                outputs = model(input_ids=chunk_ids, attention_mask=chunk_mask)
             
             logits = outputs.logits
             labels = chunk_ids[0, 1:]
