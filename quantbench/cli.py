@@ -59,13 +59,26 @@ from quantbench.report import generate_full_report, generate_comparison_table
 console = Console()
 
 
-def setup_logging(verbose: bool = True):
-    """Configure rich logging."""
+def setup_logging(verbose: bool = True, log_file: str = None):
+    """Configure rich logging and optional file logging."""
     level = logging.DEBUG if verbose else logging.INFO
+    handlers = [RichHandler(console=console, show_time=False, show_path=False)]
+    
+    if log_file:
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(level)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        file_handler.setFormatter(formatter)
+        handlers.append(file_handler)
+
+    # Clear previous handlers to avoid duplicate logs if called multiple times
+    logging.root.handlers = []
+
     logging.basicConfig(
         level=level,
         format="%(message)s",
-        handlers=[RichHandler(console=console, show_time=False, show_path=False)],
+        handlers=handlers,
     )
 
 
@@ -481,13 +494,13 @@ def main():
     """Main entry point."""
     args = parse_args()
 
-    setup_logging(verbose=not args.quiet)
-
     if args.list_models:
+        setup_logging(verbose=not args.quiet)
         list_models()
         sys.exit(0)
 
     if args.list_methods:
+        setup_logging(verbose=not args.quiet)
         list_methods()
         sys.exit(0)
 
@@ -510,6 +523,11 @@ def main():
         results_dir=args.output_dir,
         verbose=not args.quiet,
     )
+
+    # Setup logging to include file output
+    log_file = str(Path(config.results_dir) / "execution.log")
+    setup_logging(verbose=not args.quiet, log_file=log_file)
+    logging.getLogger(__name__).info(f"Execution logs will also be written to: {log_file}")
 
     # Run benchmark
     results = run_benchmark(config)
