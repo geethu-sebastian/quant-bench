@@ -216,8 +216,7 @@ def evaluate_perplexity_onnx(
 ) -> dict:
     """Evaluate perplexity of an ONNX model.
 
-    Since ONNX models don't natively support loss computation,
-    we manually compute cross-entropy loss from logits.
+    Uses Optimum's ORTModelForCausalLM.
 
     Args:
         onnx_model_path: Path to the ONNX model.
@@ -232,7 +231,8 @@ def evaluate_perplexity_onnx(
     Returns:
         Dict with perplexity metrics.
     """
-    import onnxruntime as ort
+    from optimum.onnxruntime import ORTModelForCausalLM
+    from pathlib import Path
 
     logger.info(f"Evaluating ONNX model perplexity on {dataset_name}/{dataset_config}...")
 
@@ -243,14 +243,20 @@ def evaluate_perplexity_onnx(
     texts = [item["text"] for item in dataset if item["text"].strip()][:max_samples]
     full_text = "\n\n".join(texts)
 
-    encodings = tokenizer(full_text, return_tensors="np", truncation=False)
+    encodings = tokenizer(full_text, return_tensors="pt", truncation=False)
     input_ids = encodings["input_ids"]
     seq_len = input_ids.shape[1]
 
-    # Create ONNX session
-    session = ort.InferenceSession(
-        onnx_model_path,
-        providers=["CPUExecutionProvider"],
+    # Create ONNX session via Optimum
+    model_dir = Path(onnx_model_path).parent.as_posix()
+    file_name = Path(onnx_model_path).name
+
+    model = ORTModelForCausalLM.from_pretrained(
+        model_dir,
+        file_name=file_name,
+        provider="CPUExecutionProvider",
+        use_cache=False,
+        trust_remote_code=True
     )
 
     nlls = []
@@ -267,21 +273,15 @@ def evaluate_perplexity_onnx(
         if end_loc - begin_loc < 10:
             break
 
-        chunk_ids = input_ids[:, begin_loc:end_loc].astype(np.int64)
-        chunk_mask = np.ones_like(chunk_ids, dtype=np.int64)
+        chunk_ids = input_ids[:, begin_loc:end_loc]
 
         try:
-            outputs = session.run(
-                None,
-                {
-                    "input_ids": chunk_ids,
-                    "attention_mask": chunk_mask,
-                },
-            )
-
-            logits = torch.tensor(outputs[0])
-            labels = torch.tensor(chunk_ids[0, 1:], dtype=torch.long)
-            shift_logits = logits[0, :-1, :]
+            with torch.no_grad():
+                outputs = model(input_ids=chunk_ids)
+            
+            logits = outputs.logits
+            labels = chunk_ids[0, 1:]
+            shift_logits = logits[0, :-1, :].contiguous()
 
             nll = loss_fct(shift_logits, labels).item()
 
